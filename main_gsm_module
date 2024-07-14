@@ -1,0 +1,198 @@
+const String PHONE = "**************";//enter phone number here
+//String PHONE = ""; //For Multiple user
+String msg;
+String NAME;
+const char vl = "cm³";
+#define trigpin 25 // orange wire
+#define echopin 8// yellow wire
+int duration;
+int level;
+int volume;
+int Millilitres;
+float percentage;
+int capacity;
+bool run=false;
+int i =0;
+void measuredistance(){
+  digitalWrite(trigpin,LOW);
+  delayMicroseconds(5);
+  digitalWrite(trigpin,HIGH);
+  delayMicroseconds(25);
+  digitalWrite(trigpin,LOW);
+  duration=pulseIn(echopin,HIGH);
+  level= 18-((duration/29.1545)/2);// height minus distance measured by ultrasonic to get level of water
+  
+  volume=49*level; // cross-section multipied with level of water
+  Millilitres=volume;// ml is equal to cm3
+  percentage=(volume * 0.113379); //divide 100 by product of cross section and height 
+   
+
+  
+
+delay(1000);
+}
+String getLevel(){
+  level=18-((duration/29.1545)/2);
+ 
+  String message = "Level: " + String(level) + "cm \n";
+    return message;
+}
+String getmillilitres(){
+  Millilitres=volume;
+  String message = "Millilitres: " + String(Millilitres) + " ml \n";
+    return message;
+}
+String getVolume(){
+  
+  volume=49*level;
+  
+ 
+  percentage=(volume * 0.113379);
+  String message = "Volume: " + String(volume) + "cm³ \n";
+  message += "Percent: " + String(percentage) + " % \n";
+    return message;
+}
+
+String getCapacity(){
+  capacity = 880;
+  String message = "Capacity: " + String(capacity) + "ml \n";
+    return message;
+}
+
+
+void setup() {
+  pinMode(4, OUTPUT); //Setting Pin 13 as output
+
+  delay(1000);
+
+  Serial.begin(9600);
+  Serial.println("Initializing Serial... ");
+
+  Serial2.begin(9600);
+  Serial.println("Initializing GSM module...");
+
+  Serial2.print("AT+CMGF=1\r"); //SMS text mode
+  delay(1000);
+  Serial2.print("AT+CNMI=2,2,0,0,0\r"); // AT Command to receive a live SMS
+  delay(1000);
+    
+}
+
+void loop(){
+
+  while (Serial2.available())
+  {
+    parseData(Serial2.readString());//Calls the parseData function to parse SMS
+  }
+  
+ measuredistance();
+ 
+  while (Serial.available())
+  {
+    Serial2.println(Serial.readString());
+  }
+}
+
+
+void parseData(String buff) {
+  Serial.println(buff);
+
+  unsigned int index;
+
+  //Remove sent "AT Command" from the response string.
+  index = buff.indexOf("\r");
+  buff.remove(0, index + 2);
+  buff.trim();
+
+  if (buff != "OK") {
+    index = buff.indexOf(":");
+    String cmd = buff.substring(0, index);
+    cmd.trim();
+
+    buff.remove(0, index + 2);
+
+    //Parse necessary message from Serial2L Serial buffer string
+    if (cmd == "+CMT") {
+      //get newly arrived memory location and store it in temp
+      index = buff.lastIndexOf(0x0D);//Looking for position of CR(Carriage Return)
+      msg = buff.substring(index + 2, buff.length());//Writes message to variable "msg"
+      msg.toLowerCase();//Whole message gets changed to lower case
+      Serial.println(msg);
+
+      index = buff.indexOf(0x22);//Looking for position of first double quotes-> "
+      PHONE = buff.substring(index + 1, index + 14); //Writes phone number to variable "PHONE"
+      
+      Serial.println(PHONE);
+      delay(1000);
+    doAction();//Does necessary action according to SMS message
+    }
+  }
+}
+
+void doAction()
+{
+  
+  if(msg == "pump1"){
+    digitalWrite(4 ,HIGH);
+    digitalWrite(6,HIGH);
+    delay(1000);
+    
+    Reply("Pump turned on");
+  }
+  if(msg == "pump0"){
+    digitalWrite(4 ,LOW);
+    digitalWrite(6,LOW);
+       Reply("Pump is turned off");
+    
+  }
+
+ if (msg == "?") {
+      String welcome = "Welcome, " + PHONE + ".\n";
+      welcome += "Use the following commands to control your outputs.\n\n";
+      welcome += "1. cap to get water tank capacity \n";
+      welcome += "2. ml to get capacity in millilitres \n";
+      welcome += "3. vol to get percentage of  water in tank \n";
+      welcome += "4. pump1 to turn on water pump \n";
+      welcome += "5. pump0 to turn off water pump \n";
+      welcome += "(COMMANDS ARE CASE SENSITIVE KINDLY ADHERE)\n";
+      Reply(welcome);
+      delay(100);
+    }
+    if (msg == "cap") {
+      String capacity = getCapacity();
+      Reply("Capacity of the tank is: 882 ml");
+      delay(100);
+    }
+    
+    if (msg == "ml") {
+      String Millilitres=getmillilitres();
+      Reply(Millilitres);
+      delay(1000);
+    }
+    
+    
+     if (msg == "vol") {
+      String volume = getVolume();
+      Reply(volume);
+      delay(1000);
+      }
+
+  PHONE = "";//Clears phone string
+  msg = "";//Clears message string
+}
+
+
+
+
+void Reply(String String)
+{
+  Serial2.print("AT+CMGF=1\r");
+  delay(1000);
+  Serial2.print("AT+CMGS=\"" + PHONE + "\"\r");
+  delay(1000);
+  Serial2.print( String);
+  delay(1000);
+  Serial2.write(0x1A); //ascii code for ctrl+z, DEC->26, HEX->0x1A
+  delay(1000);
+
+}
